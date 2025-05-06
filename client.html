@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hybrid Cryptosystem</title>
+  </head>
+  <body>
+    <h1>Hybrid Cryptosystem</h1>
+    <div style="display: flex; gap: 10px">
+      <textarea id="data" placeholder="Enter data to encrypt">
+        hello, world!
+      </textarea>
+      <button
+        id="encrypt"
+        onclick="encryptAndSend()"
+        style="height: 38px; width: 128px"
+      >
+        Encrypt and Send
+      </button>
+    </div>
+    <div
+      style="
+        margin-top: 1em;
+        background-color: #f0f0f0;
+        padding: 10px;
+        border-radius: 5px;
+        min-height: 80px;
+      "
+    >
+      AES Key:
+      <p id="aes-key"></p>
+    </div>
+    <div
+      style="
+        margin-top: 1em;
+        background-color: #f0f0f0;
+        padding: 10px;
+        border-radius: 5px;
+        min-height: 80px;
+      "
+    >
+      Encrypted AES Key:
+      <p id="encrypted-aes-key"></p>
+    </div>
+    <div
+      style="
+        margin-top: 1em;
+        background-color: #f0f0f0;
+        padding: 10px;
+        border-radius: 5px;
+      "
+    >
+      Public Key:
+      <p id="public-key"></p>
+    </div>
+    <div
+      style="
+        margin-top: 1em;
+        background-color: #f0f0f0;
+        padding: 10px;
+        border-radius: 5px;
+      "
+    >
+      Result:
+      <p id="result"></p>
+    </div>
+
+    <script>
+      async function encryptAndSend() {
+        const data = document.getElementById("data").value;
+
+        // get public key
+        const response = await fetch("http://localhost:3000/public-key");
+        const publicKey = await response.text();
+
+        // generate AES
+        const aesKey = crypto.getRandomValues(new Uint8Array(32));
+
+        // encrypt data using AES
+        const encoder = new TextEncoder();
+        const encodedData = encoder.encode(data);
+        const aesKeyHex = Array.from(aesKey)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
+        const aesKeyBuffer = new Uint8Array(aesKey);
+        const iv = new Uint8Array(16); // Initialization vector (all zeros)
+        const aesKeyBase64 = btoa(String.fromCharCode(...aesKeyBuffer));
+
+        // encrypt the data using AES
+        const cipher = crypto.subtle.encrypt(
+          {
+            name: "AES-CBC",
+            iv: iv,
+          },
+          await crypto.subtle.importKey(
+            "raw",
+            aesKey,
+            { name: "AES-CBC" },
+            false,
+            ["encrypt"]
+          ),
+          encodedData
+        );
+
+        const encryptedData = btoa(
+          String.fromCharCode(...new Uint8Array(await cipher))
+        );
+
+        // sanitize RSA public key
+
+        const publicKeyBase64 = publicKey
+          .replace(/-----BEGIN PUBLIC KEY-----/g, "")
+          .replace(/-----END PUBLIC KEY-----/g, "")
+          .replace(/\r?\n|\r/g, "")
+          .trim();
+
+        if (!/^[A-Za-z0-9+/=]+$/.test(publicKeyBase64)) {
+          throw new Error("Invalid characters detected in the public key.");
+        }
+
+        const publicKeyBuffer = Uint8Array.from(atob(publicKeyBase64), (c) =>
+          c.charCodeAt(0)
+        );
+
+        const importedPublicKey = await crypto.subtle.importKey(
+          "spki",
+          publicKeyBuffer,
+          {
+            name: "RSA-OAEP",
+            hash: { name: "SHA-256" },
+          },
+          true,
+          ["encrypt"]
+        );
+
+        const encryptedAesKeyBuffer = await crypto.subtle.encrypt(
+          {
+            name: "RSA-OAEP",
+          },
+          importedPublicKey,
+          aesKey
+        );
+
+        const encryptedAesKey = btoa(
+          String.fromCharCode(...new Uint8Array(encryptedAesKeyBuffer))
+        );
+
+        document.getElementById("public-key").innerText = publicKey;
+        document.getElementById("aes-key").innerText = Array.from(aesKey)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+        document.getElementById("encrypted-aes-key").innerText =
+          encryptedAesKey;
+
+        const result = await fetch("http://localhost:3000/decrypt", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ encryptedData, aesKey: encryptedAesKey }),
+        });
+        document.getElementById("result").innerText = await result.text();
+      }
+    </script>
+  </body>
+</html>
