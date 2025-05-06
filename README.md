@@ -27,5 +27,5 @@ This project implements a hybrid cryptosystem using RSA and AES encryption. The 
    ```bash
    node server.js
    ```
-2. Open `client.html` in a web browser or run with `python -m http.server 5500` then open `localhost:5500` in browser.
+2. Open `client.html` in a web browser or run with `python -m http.server 5500` then open `localhost:5500/client.html` in browser.
 3. Enter data to encrypt and click the "Encrypt and Send" button.
